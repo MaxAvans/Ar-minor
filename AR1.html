@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>AR Paintball</title>
+  <title>AR Paintball Pro</title>
   
   <script src="https://aframe.io/releases/1.0.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/jeromeetienne/AR.js/2.1.4/aframe/build/aframe-ar.js"></script>
@@ -12,101 +12,221 @@
     body {
       margin: 0;
       overflow: hidden;
-      font-family: sans-serif;
+      font-family: 'Segoe UI', sans-serif;
     }
-    #vizier {
+    #vizierKruis {
       position: fixed;
       top: 50%;
       left: 50%;
-      width: 30px;
-      height: 30px;
-      border: 3px solid rgba(255, 255, 255, 0.7);
-      border-radius: 50%;
+      width: 40px;
+      height: 40px;
       transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 1000;
     }
-    #vizier::after {
-      content: '';
+    .kruisLijn {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 6px;
-      height: 6px;
-      background: red;
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
+      background: rgba(0, 255, 0, 0.7);
     }
-    #uiTekst {
+    .verticaal { top: 0; left: 19px; width: 2px; height: 40px; }
+    .horizontaal { top: 19px; left: 0; width: 40px; height: 2px; }
+    
+    #munitieTeller {
       position: fixed;
-      bottom: 40px;
-      width: 100%;
-      text-align: center;
+      bottom: 30px;
+      right: 30px;
+      color: #00ffcc;
+      font-size: 28px;
+      font-weight: bold;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 12px 24px;
+      border-radius: 12px;
+      border: 2px solid #00ffcc;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    #scoreBord {
+      position: fixed;
+      top: 20px;
+      left: 20px;
       color: white;
       font-size: 20px;
       font-weight: bold;
-      text-shadow: 2px 2px 5px #000000;
-      pointer-events: none;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 12px 24px;
+      border-radius: 12px;
       z-index: 1000;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
 
-  <div id="vizier"></div>
-  <div id="uiTekst">Tik op het scherm om te schieten</div>
-
-  <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-    <a-camera id="mijnCamera" position="0 1.6 0"></a-camera>
-  </a-scene>
+  <div id="vizierKruis">
+    <div class="kruisLijn verticaal"></div>
+    <div class="kruisLijn horizontaal"></div>
+  </div>
+  <div id="munitieTeller">99 / 99</div>
+  <div id="scoreBord">Treffers: 0</div>
 
   <script>
-    const scene = document.querySelector('a-scene');
-    const camera = document.getElementById('mijnCamera');
+    AFRAME.registerComponent('paintball-systeem', {
+      init: function () {
+        this.camera = document.querySelector('[camera]');
+        this.raycaster = new THREE.Raycaster();
+        this.muis = new THREE.Vector2();
+        this.kleuren = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ff8800', '#ff0088'];
+        this.schoten = 0;
+        
+        window.addEventListener('click', (event) => {
+          this.muis.x = (event.clientX / window.innerWidth) * 2 - 1;
+          this.muis.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-    const kleuren = [
-      '#ff0000', '#00ff00', '#0000ff', '#ffff00', 
-      '#ff00ff', '#00ffff', '#ff8800', '#ff0088'
-    ];
+          this.raycaster.setFromCamera(this.muis, this.camera.components.camera.camera);
+          
+          const richting = this.raycaster.ray.direction;
+          const oorsprong = this.raycaster.ray.origin;
+          
+          const afstand = 10;
+          const doel = new THREE.Vector3().copy(richting).multiplyScalar(afstand).add(oorsprong);
 
-    window.addEventListener('click', function() {
-      const willekeurigeKleur = kleuren[Math.floor(Math.random() * kleuren.length)];
+          this.vuurVerfbal(doel);
+          this.speelWapenAnimatie();
+          this.updateUi();
+        });
+      },
+      
+      vuurVerfbal: function (doel) {
+        const scene = document.querySelector('a-scene');
+        const kleur = this.kleuren[Math.floor(Math.random() * this.kleuren.length)];
+        const loop = document.querySelector('#wapenLoop');
+        
+        const startPos = new THREE.Vector3();
+        loop.object3D.getWorldPosition(startPos);
 
-      const verfbal = document.createElement('a-sphere');
-      verfbal.setAttribute('radius', '0.15');
-      verfbal.setAttribute('color', willekeurigeKleur);
-      verfbal.setAttribute('material', 'roughness: 0.1; metalness: 0.2');
+        const bal = document.createElement('a-sphere');
+        bal.setAttribute('radius', '0.08');
+        bal.setAttribute('color', kleur);
+        bal.setAttribute('material', 'roughness: 0.2 metalness: 0.1');
+        bal.setAttribute('position', `${startPos.x} ${startPos.y} ${startPos.z}`);
+        
+        scene.appendChild(bal);
 
-      const camPos = camera.getAttribute('position');
-      verfbal.setAttribute('position', `${camPos.x} ${camPos.y} ${camPos.z}`);
-
-      const richting = new THREE.Vector3(0, 0, -1);
-      richting.applyQuaternion(camera.object3D.quaternion);
-
-      const afstand = 8;
-      const doelX = camPos.x + richting.x * afstand;
-      const doelY = camPos.y + richting.y * afstand;
-      const doelZ = camPos.z + richting.z * afstand;
-
-      verfbal.setAttribute('animation__vlucht', `
-        property: position; 
-        to: ${doelX} ${doelY} ${doelZ}; 
-        dur: 600; 
-        easing: linear;
-      `);
-
-      setTimeout(() => {
-        verfbal.setAttribute('animation__klets', `
-          property: scale; 
-          to: 2 2 0.05; 
-          dur: 150; 
-          easing: easeOutQuad;
+        bal.setAttribute('animation__vlucht', `
+          property: position; 
+          to: ${doel.x} ${doel.y} ${doel.z}; 
+          dur: 250; 
+          easing: linear
         `);
-      }, 600);
 
-      scene.appendChild(verfbal);
+        setTimeout(() => {
+          bal.setAttribute('animation__plat', `
+            property: scale; 
+            to: 4 4 0.05; 
+            dur: 150; 
+            easing: easeOutQuad
+          `);
+          this.maakSpetters(doel, kleur);
+        }, 250);
+      },
+
+      speelWapenAnimatie: function () {
+        const wapen = document.querySelector('#wapenSysteem');
+        
+        wapen.removeAttribute('animation__terug');
+        wapen.removeAttribute('animation__heen');
+        wapen.removeAttribute('animation__rotatie');
+        wapen.removeAttribute('animation__rotatie_terug');
+        
+        wapen.setAttribute('animation__heen', `
+          property: position; 
+          to: 0.25 -0.25 -0.3; 
+          dur: 50; 
+          easing: easeOutQuad
+        `);
+        wapen.setAttribute('animation__rotatie', `
+          property: rotation; 
+          to: 15 0 0; 
+          dur: 50; 
+          easing: easeOutQuad
+        `);
+        
+        setTimeout(() => {
+          wapen.setAttribute('animation__terug', `
+            property: position; 
+            to: 0.3 -0.3 -0.4; 
+            dur: 150; 
+            easing: easeInQuad
+          `);
+          wapen.setAttribute('animation__rotatie_terug', `
+            property: rotation; 
+            to: 0 0 0; 
+            dur: 150; 
+            easing: easeInQuad
+          `);
+        }, 50);
+      },
+
+      maakSpetters: function (doel, kleur) {
+        const scene = document.querySelector('a-scene');
+        
+        for(let i = 0; i < 8; i++) {
+          const spetter = document.createElement('a-sphere');
+          const grootte = Math.random() * 0.03 + 0.01;
+          spetter.setAttribute('radius', grootte);
+          spetter.setAttribute('color', kleur);
+          spetter.setAttribute('position', `${doel.x} ${doel.y} ${doel.z}`);
+          
+          const afwijkingX = doel.x + (Math.random() - 0.5) * 2;
+          const afwijkingY = doel.y + (Math.random() - 0.5) * 2;
+          const afwijkingZ = doel.z + (Math.random() - 0.5) * 2;
+
+          spetter.setAttribute('animation__vlieg', `
+            property: position; 
+            to: ${afwijkingX} ${afwijkingY} ${afwijkingZ}; 
+            dur: 350; 
+            easing: easeOutCubic
+          `);
+          spetter.setAttribute('animation__krimp', `
+            property: scale; 
+            to: 0 0 0; 
+            dur: 350; 
+            easing: easeInQuad
+          `);
+          
+          scene.appendChild(spetter);
+          
+          setTimeout(() => {
+            if(spetter.parentNode) spetter.parentNode.removeChild(spetter);
+          }, 350);
+        }
+      },
+
+      updateUi: function () {
+        this.schoten++;
+        document.getElementById('scoreBord').innerText = 'Treffers: ' + this.schoten;
+        const kogels = 100 - (this.schoten % 100);
+        document.getElementById('munitieTeller').innerText = kogels + ' / 99';
+      }
     });
   </script>
+
+  <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false" paintball-systeem>
+    <a-camera position="0 1.6 0">
+      
+      <a-entity id="wapenSysteem" position="0.3 -0.3 -0.4">
+        
+        <a-box id="wapenBasis" color="#333333" depth="0.4" height="0.12" width="0.08" position="0 0 0"></a-box>
+        
+        <a-cylinder id="wapenLoop" color="#111111" radius="0.02" height="0.4" position="0 0.06 -0.2" rotation="90 0 0"></a-cylinder>
+        
+        <a-box id="wapenMagazijn" color="#222222" depth="0.1" height="0.2" width="0.06" position="0 -0.1 0.05" rotation="15 0 0"></a-box>
+        
+        <a-box id="wapenVizier" color="#ff0000" depth="0.02" height="0.04" width="0.02" position="0 0.08 0.1"></a-box>
+      </a-entity>
+      
+    </a-camera>
+  </a-scene>
 
 </body>
 </html>
